@@ -1,11 +1,5 @@
 import React, { PureComponent } from 'react';
-import {
-  StyleSheet,
-  Alert,
-  InteractionManager,
-  AppState,
-  View,
-} from 'react-native';
+import { Alert, InteractionManager, AppState, View } from 'react-native';
 import PropTypes from 'prop-types';
 import { getApproveNavbar } from '../../../UI/Navbar';
 import { connect } from 'react-redux';
@@ -17,14 +11,15 @@ import AddNickname from '../../../UI/ApproveTransactionReview/AddNickname';
 import Modal from 'react-native-modal';
 import { strings } from '../../../../../locales/i18n';
 import { setTransactionObject } from '../../../../actions/transaction';
-import { GAS_ESTIMATE_TYPES, util } from '@metamask/controllers';
+import { GAS_ESTIMATE_TYPES } from '@metamask/gas-fee-controller';
+import { BNToHex, hexToBN } from '@metamask/controller-utils';
 import { addHexPrefix, fromWei, renderFromWei } from '../../../../util/number';
 import { getNormalizedTxState, getTicker } from '../../../../util/transactions';
 import { getGasLimit } from '../../../../util/custom-gas';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import NotificationManager from '../../../../core/NotificationManager';
 import Analytics from '../../../../core/Analytics/Analytics';
-import { ANALYTICS_EVENT_OPTS } from '../../../../util/analytics';
+import { MetaMetricsEvents } from '../../../../core/Analytics';
 import Logger from '../../../../util/Logger';
 import AnalyticsV2 from '../../../../util/analyticsV2';
 import EditGasFee1559 from '../../../UI/EditGasFee1559Update';
@@ -39,25 +34,17 @@ import {
   startGasPolling,
   stopGasPolling,
 } from '../../../../core/GasPolling/GasPolling';
-
-const { BNToHex, hexToBN } = util;
+import {
+  selectChainId,
+  selectNetwork,
+  selectProviderType,
+  selectTicker,
+} from '../../../../selectors/networkController';
+import ShowBlockExplorer from '../../../UI/ApproveTransactionReview/ShowBlockExplorer';
+import createStyles from './styles';
 
 const EDIT = 'edit';
 const REVIEW = 'review';
-
-const styles = StyleSheet.create({
-  keyboardAwareWrapper: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  bottomModal: {
-    justifyContent: 'flex-end',
-    margin: 0,
-  },
-  updateNickView: {
-    margin: 0,
-  },
-});
 
 /**
  * PureComponent that manages ERC20 approve from the dapp browser
@@ -124,10 +111,6 @@ class Approve extends PureComponent {
      */
     chainId: PropTypes.string,
     /**
-     * A string representing the network type
-     */
-    networkType: PropTypes.string,
-    /**
      * An object of all saved addresses
      */
     addressBook: PropTypes.object,
@@ -147,12 +130,15 @@ class Approve extends PureComponent {
     gasSelected: AppConstants.GAS_OPTIONS.MEDIUM,
     gasSelectedTemp: AppConstants.GAS_OPTIONS.MEDIUM,
     transactionConfirmed: false,
-    addNickname: false,
+    shouldAddNickname: false,
+    shouldVerifyContractDetails: false,
     suggestedGasLimit: undefined,
     eip1559GasObject: {},
     eip1559GasTransaction: {},
     legacyGasObject: {},
     legacyGasTransaction: {},
+    isBlockExplorerVisible: false,
+    address: '',
   };
 
   computeGasEstimates = (overrideGasLimit, gasEstimateTypeChanged) => {
@@ -206,8 +192,16 @@ class Approve extends PureComponent {
     }
   };
 
-  onUpdateContractNickname = () => {
-    this.setState({ addNickname: !this.state.addNickname });
+  showVerifyContractDetails = () =>
+    this.setState({ shouldVerifyContractDetails: true });
+  closeVerifyContractDetails = () =>
+    this.setState({ shouldVerifyContractDetails: false });
+
+  toggleModal = (val) => {
+    this.setState({
+      shouldAddNickname: !this.state.shouldAddNickname,
+      address: val,
+    });
   };
 
   startPolling = async () => {
@@ -436,7 +430,7 @@ class Approve extends PureComponent {
       await KeyringController.resetQRKeyringState();
       await TransactionController.approveTransaction(transaction.id);
       AnalyticsV2.trackEvent(
-        AnalyticsV2.ANALYTICS_EVENTS.APPROVAL_COMPLETED,
+        MetaMetricsEvents.APPROVAL_COMPLETED,
         this.getAnalyticsParams(),
       );
     } catch (error) {
@@ -449,7 +443,7 @@ class Approve extends PureComponent {
         Logger.error(error, 'error while trying to send transaction (Approve)');
       } else {
         AnalyticsV2.trackEvent(
-          AnalyticsV2.ANALYTICS_EVENTS.QR_HARDWARE_TRANSACTION_CANCELED,
+          MetaMetricsEvents.QR_HARDWARE_TRANSACTION_CANCELED,
         );
       }
       this.setState({ transactionHandled: false });
@@ -458,11 +452,20 @@ class Approve extends PureComponent {
   };
 
   onCancel = () => {
+    const { TransactionController } = Engine.context;
+    TransactionController.cancelTransaction(this.props.transaction.id);
     AnalyticsV2.trackEvent(
-      AnalyticsV2.ANALYTICS_EVENTS.APPROVAL_CANCELLED,
+      MetaMetricsEvents.APPROVAL_CANCELLED,
       this.getAnalyticsParams(),
     );
     this.props.toggleApproveModal(false);
+
+    NotificationManager.showSimpleNotification({
+      status: `simple_notification_rejected`,
+      duration: 5000,
+      title: strings('notifications.approved_tx_rejected_title'),
+      description: strings('notifications.wc_description'),
+    });
   };
 
   review = () => {
@@ -474,7 +477,7 @@ class Approve extends PureComponent {
     if (mode === EDIT) {
       InteractionManager.runAfterInteractions(() => {
         Analytics.trackEvent(
-          ANALYTICS_EVENT_OPTS.SEND_FLOW_ADJUSTS_TRANSACTION_FEE,
+          MetaMetricsEvents.SEND_FLOW_ADJUSTS_TRANSACTION_FEE,
         );
       });
     }
@@ -487,7 +490,7 @@ class Approve extends PureComponent {
   getGasAnalyticsParams = () => {
     try {
       const { analyticsParams } = this.state;
-      const { gasEstimateType, networkType } = this.props;
+      const { gasEstimateType } = this.props;
       return {
         dapp_host_name: analyticsParams?.dapp_host_name,
         dapp_url: analyticsParams?.dapp_url,
@@ -496,7 +499,6 @@ class Approve extends PureComponent {
           anonymous: true,
         },
         gas_estimate_type: gasEstimateType,
-        network_name: networkType,
       };
     } catch (error) {
       return {};
@@ -526,10 +528,23 @@ class Approve extends PureComponent {
   };
 
   updateTransactionState = (gas) => {
-    this.setState({ eip1559GasTransaction: gas, legacyGasTransaction: gas });
+    const gasError = this.validateGas(gas.totalMaxHex || gas.totalHex);
+
+    this.setState({
+      eip1559GasTransaction: gas,
+      legacyGasTransaction: gas,
+      gasError,
+    });
+  };
+
+  setIsBlockExplorerVisible = (val) => {
+    this.setState({ isBlockExplorerVisible: val });
   };
 
   render = () => {
+    const colors = this.context.colors || mockTheme.colors;
+    const styles = createStyles(colors);
+
     const {
       mode,
       ready,
@@ -541,7 +556,9 @@ class Approve extends PureComponent {
       eip1559GasObject,
       eip1559GasTransaction,
       legacyGasObject,
-      legacyGasTransaction,
+      gasError,
+      address,
+      shouldAddNickname,
     } = this.state;
 
     const {
@@ -552,6 +569,7 @@ class Approve extends PureComponent {
       gasFeeEstimates,
       primaryCurrency,
       chainId,
+      providerType,
     } = this.props;
 
     const selectedGasObject = {
@@ -571,13 +589,25 @@ class Approve extends PureComponent {
       suggestedGasPrice: legacyGasObject?.suggestedGasPrice,
     };
 
-    const colors = this.context.colors || mockTheme.colors;
-
-    const addressData = checkIfAddressIsSaved(
+    const savedContactList = checkIfAddressIsSaved(
       addressBook,
       network,
       transaction,
     );
+
+    const savedContactListToArray = Object.values(addressBook).flatMap(
+      (value) => Object.values(value),
+    );
+
+    let addressNickname = '';
+
+    const filteredSavedContactList = savedContactListToArray.filter(
+      (contact) => contact.address === safeToChecksumAddress(address),
+    );
+
+    if (filteredSavedContactList.length > 0) {
+      addressNickname = filteredSavedContactList[0].name;
+    }
 
     if (!transaction.id) return null;
     return (
@@ -586,7 +616,9 @@ class Approve extends PureComponent {
         animationIn="slideInUp"
         animationOut="slideOutDown"
         style={
-          this.state.addNickname ? styles.updateNickView : styles.bottomModal
+          this.state.shouldAddNickname
+            ? styles.updateNickView
+            : styles.bottomModal
         }
         backdropColor={colors.overlay.default}
         backdropOpacity={1}
@@ -598,16 +630,21 @@ class Approve extends PureComponent {
         swipeDirection={'down'}
         propagateSwipe
       >
-        {this.state.addNickname ? (
+        {shouldAddNickname ? (
           <AddNickname
-            onUpdateContractNickname={this.onUpdateContractNickname}
+            closeModal={this.toggleModal}
+            address={address}
+            savedContactListToArray={savedContactListToArray}
+            addressNickname={addressNickname}
+          />
+        ) : this.state.isBlockExplorerVisible ? (
+          <ShowBlockExplorer
+            setIsBlockExplorerVisible={this.setIsBlockExplorerVisible}
+            type={providerType}
             contractAddress={transaction.to}
-            nicknameExists={addressData && !!addressData.length}
-            nickname={
-              addressData && addressData.length > 0
-                ? addressData[0].nickname
-                : ''
-            }
+            headerWrapperStyle={styles.headerWrapper}
+            headerTextStyle={styles.headerText}
+            iconStyle={styles.icon}
           />
         ) : (
           <KeyboardAwareScrollView
@@ -620,9 +657,7 @@ class Approve extends PureComponent {
                 review={this.review}
               >
                 <ApproveTransactionReview
-                  gasError={
-                    eip1559GasTransaction.error || legacyGasTransaction.error
-                  }
+                  gasError={gasError}
                   onCancel={this.onCancel}
                   onConfirm={this.onConfirm}
                   over={over}
@@ -634,12 +669,20 @@ class Approve extends PureComponent {
                   animateOnChange={animateOnChange}
                   isAnimating={isAnimating}
                   gasEstimationReady={ready}
+                  savedContactListToArray={savedContactListToArray}
                   transactionConfirmed={transactionConfirmed}
+                  showBlockExplorer={this.setIsBlockExplorerVisible}
                   onUpdateContractNickname={this.onUpdateContractNickname}
-                  nicknameExists={addressData && !!addressData.length}
+                  toggleModal={this.toggleModal}
+                  showVerifyContractDetails={this.showVerifyContractDetails}
+                  shouldVerifyContractDetails={
+                    this.state.shouldVerifyContractDetails
+                  }
+                  closeVerifyContractDetails={this.closeVerifyContractDetails}
+                  nicknameExists={savedContactList && !!savedContactList.length}
                   nickname={
-                    addressData && addressData.length > 0
-                      ? addressData[0].nickname
+                    savedContactList && savedContactList.length > 0
+                      ? savedContactList[0].nickname
                       : ''
                   }
                   chainId={chainId}
@@ -698,7 +741,7 @@ class Approve extends PureComponent {
 
 const mapStateToProps = (state) => ({
   accounts: state.engine.backgroundState.AccountTrackerController.accounts,
-  ticker: state.engine.backgroundState.NetworkController.provider.ticker,
+  ticker: selectTicker(state),
   transaction: getNormalizedTxState(state),
   transactions: state.engine.backgroundState.TransactionController.transactions,
   accountsLength: Object.keys(
@@ -706,7 +749,7 @@ const mapStateToProps = (state) => ({
   ).length,
   tokensLength: state.engine.backgroundState.TokensController.tokens.length,
   primaryCurrency: state.settings.primaryCurrency,
-  chainId: state.engine.backgroundState.NetworkController.provider.chainId,
+  chainId: selectChainId(state),
   gasFeeEstimates:
     state.engine.backgroundState.GasFeeController.gasFeeEstimates,
   gasEstimateType:
@@ -717,9 +760,9 @@ const mapStateToProps = (state) => ({
     state.engine.backgroundState.CurrencyRateController.nativeCurrency,
   conversionRate:
     state.engine.backgroundState.CurrencyRateController.conversionRate,
-  networkType: state.engine.backgroundState.NetworkController.provider.type,
   addressBook: state.engine.backgroundState.AddressBookController.addressBook,
-  network: state.engine.backgroundState.NetworkController.network,
+  network: selectNetwork(state),
+  providerType: selectProviderType(state),
 });
 
 const mapDispatchToProps = (dispatch) => ({

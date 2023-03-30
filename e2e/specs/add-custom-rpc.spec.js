@@ -20,6 +20,8 @@ import SkipAccountSecurityModal from '../pages/modals/SkipAccountSecurityModal';
 import OnboardingWizardModal from '../pages/modals/OnboardingWizardModal';
 import ProtectYourWalletModal from '../pages/modals/ProtectYourWalletModal';
 import WhatsNewModal from '../pages/modals/WhatsNewModal';
+import EnableAutomaticSecurityChecksView from '../pages/EnableAutomaticSecurityChecksView';
+import { acceptTermOfUse } from '../viewHelper';
 
 const GORELI = 'Goerli Test Network';
 const XDAI_URL = 'https://rpc.gnosischain.com';
@@ -41,6 +43,8 @@ describe('Custom RPC Tests', () => {
     await MetaMetricsOptIn.isVisible();
     await MetaMetricsOptIn.tapNoThanksButton();
 
+    await acceptTermOfUse();
+
     await CreatePasswordView.isVisible();
     await CreatePasswordView.enterPassword(PASSWORD);
     await CreatePasswordView.reEnterPassword(PASSWORD);
@@ -56,6 +60,12 @@ describe('Custom RPC Tests', () => {
     await SkipAccountSecurityModal.tapIUnderstandCheckBox();
     await SkipAccountSecurityModal.tapSkipButton();
     await WalletView.isVisible();
+  });
+
+  it('Should dismiss Automatic Security checks screen', async () => {
+    await TestHelpers.delay(3500);
+    await EnableAutomaticSecurityChecksView.isVisible();
+    await EnableAutomaticSecurityChecksView.tapNoThanks();
   });
 
   it('should tap on "Got it" to dimiss the whats new modal', async () => {
@@ -103,20 +113,6 @@ describe('Custom RPC Tests', () => {
 
     await NetworkView.isNetworkViewVisible();
   });
-  // it('should tap add a popular network from network list modal', async () => {
-  // 	await WalletView.tapNetworksButtonOnNavBar();
-
-  // 	await NetworkListModal.isVisible();
-  // 	await NetworkListModal.tapAddNetworkButton();
-  // 	await NetworkView.isNetworkViewVisible();
-
-  // });
-  // it('should add a popular network', async () => {
-  // 	await WalletView.tapNetworksButtonOnNavBar();
-
-  // 	await NetworkView.selectPopularNetwork("Optimism");
-
-  // });
 
   it('should add xDai network', async () => {
     // Tap on Add Network button
@@ -124,7 +120,6 @@ describe('Custom RPC Tests', () => {
     await NetworkView.tapAddNetworkButton();
     await NetworkView.switchToCustomNetworks();
 
-    //await NetworkView.isRpcViewVisible();
     await NetworkView.typeInNetworkName('xDai');
     await NetworkView.typeInRpcUrl('abc'); // Input incorrect RPC URL
     await NetworkView.isRPCWarningVisble(); // Check that warning is displayed

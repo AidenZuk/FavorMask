@@ -16,6 +16,8 @@ export default {
   SWARM_DEFAULT_GATEWAY_URL: 'https://swarm-gateways.net/bzz:/',
   supportedTLDs: ['eth', 'xyz', 'test'],
   MAX_PUSH_NOTIFICATION_PROMPT_TIMES: 2,
+  PORTFOLIO_URL:
+    process.env.MM_PORTFOLIO_URL || 'https://portfolio.metamask.io',
   CONNEXT: {
     HUB_EXCHANGE_CEILING_TOKEN: 69,
     MIN_DEPOSIT_ETH: 0.03,
@@ -42,23 +44,6 @@ export default {
     chainChanged: 'metamask_chainChanged',
   },
   FIAT_ORDERS: {
-    TRANSAK_URL: 'https://global.transak.com/',
-    TRANSAK_URL_STAGING: 'https://staging-global.transak.com/',
-    TRANSAK_API_URL_PRODUCTION: 'https://api.transak.com/',
-    TRANSAK_API_URL_STAGING: 'https://staging-api.transak.com/',
-    TRANSAK_REDIRECT_URL: 'https://metamask.io/',
-    MOONPAY_URL: 'https://buy.moonpay.com/',
-    MOONPAY_URL_STAGING: 'https://buy-sandbox.moonpay.com/',
-    MOONPAY_API_URL_PRODUCTION: 'https://api.moonpay.com/',
-    MOONPAY_REDIRECT_URL: 'about:blank',
-    MOONPAY_SIGN_URL_PRODUCTION:
-      'https://swap.metaswap.codefi.network/moonpaySign',
-    MOONPAY_SIGN_URL_STAGING:
-      'https://swap.metaswap-dev.codefi.network/moonpaySign',
-    WYRE_API_ENDPOINT: 'https://api.sendwyre.com/',
-    WYRE_API_ENDPOINT_TEST: 'https://api.testwyre.com/',
-    WYRE_MERCHANT_ID: 'merchant.io.metamask.wyre',
-    WYRE_MERCHANT_ID_TEST: 'merchant.io.metamask.wyre.test',
     POLLING_FREQUENCY: 10000,
   },
   DEEPLINKS: {
@@ -85,6 +70,8 @@ export default {
   URLS: {
     TERMS_AND_CONDITIONS: 'https://consensys.net/terms-of-use/',
     PRIVACY_POLICY: 'https://consensys.net/privacy-policy/',
+    DATA_RETENTION_UPDATE:
+      'https://consensys.net/blog/news/consensys-data-retention-update/',
     CONNECTIVITY_ISSUES:
       'https://metamask.zendesk.com/hc/en-us/articles/360059386712',
     NFT: 'https://metamask.zendesk.com/hc/en-us/articles/360058238591-NFT-tokens-in-MetaMask-wallet',
@@ -140,7 +127,21 @@ export default {
   MM_SDK: {
     SDK_CONNECTIONS: 'sdkConnections',
     SDK_APPROVEDHOSTS: 'sdkApprovedHosts',
+    // Adjust the serverUrl during local dev if need to debug the communication protocol.
+    // SERVER_URL: 'http://192.168.50.114:4000',
+    SERVER_URL: 'https://metamask-sdk-socket.metafi.codefi.network/',
+    PLATFORM: 'metamask-mobile',
+    SDK_REMOTE_ORIGIN: 'MMSDKREMOTE::',
+    UNKNOWN_PARAM: 'UNKNOWN',
   },
   CANCEL_RATE: 'Transactions (Cancel)',
   SPEED_UP_RATE: 'Transactions (Speed Up)',
+  NETWORK_STATE_CHANGE_EVENT: 'NetworkController:stateChange',
+  ETH_SIGN_ERROR: 'eth_sign requires 32 byte message hash',
+  TERMS_OF_USE: {
+    TERMS_DISPLAYED: 'ToU Displayed',
+    TERMS_ACCEPTED: 'ToU Accepted',
+    TERMS_OF_USE_URL_WITHOUT_COOKIES:
+      'https://consensys.net/terms-of-use?standalone=true',
+  },
 };
